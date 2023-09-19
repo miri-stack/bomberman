@@ -1,0 +1,17 @@
+# Define Hyperparameter
+WALL = -1
+EXPLOSION = -3
+FREE = 0
+CRATE = 1
+COIN = 2
+PLAYER = 3
+BOMB = -10
+
+WINDOW_LENGTH = 7
+INPUT_SHAPE = (4,7)
+
+RETRAIN = False
+
+LEARNING_RATE = 0.001
+GAMMA = 0.99
+EPSILON = 0.9
