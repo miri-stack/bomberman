@@ -1,13 +1,38 @@
 from collections import deque, defaultdict
+import os
 import numpy as np
 import random
 import events as e
-from .train import reward_from_events
+import pickle
+from typing import List
 
 # Hyperparameters
 GAMMA = 0.9
 EPSILON = 0.1
 ALPHA = 0.1
+
+# Constants for feature values
+WALL = -1
+EXPLOSION = -3
+FREE = 0
+CRATE = 1
+COIN = 2
+PLAYER = 3
+BOMB = -10
+
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+
+# Define a mapping of event types to feature values
+event_to_feature = {
+    e.BOMB_EXPLODED: EXPLOSION,
+    e.COIN_COLLECTED: COIN,
+    e.CRATE_DESTROYED: FREE,
+    e.KILLED_OPPONENT: PLAYER,
+    e.KILLED_SELF: PLAYER,
+    e.WAITED: FREE,
+    e.BOMB_DROPPED: BOMB,
+    e.SURVIVED_ROUND: FREE,
+}
 
 class SimpleQLearningAgent:
     def __init__(self):
@@ -40,22 +65,43 @@ class SimpleQLearningAgent:
             self.q_table[old_state][action] = q_value_old_state_action + \
                                               self.alpha * (reward + GAMMA * max_q_value_new_state - q_value_old_state_action)
 
+    def save_q_table(self, file_name):
+        with open(file_name, 'wb') as file:
+            pickle.dump(dict(self.q_table), file)
+
+    def load_q_table(self, file_name):
+        with open(file_name, 'rb') as file:
+            self.q_table = defaultdict(lambda: defaultdict(float), pickle.load(file))
+
 def setup(self):
-    self.logger.info('Creating a Simple Q-learning agent')
-    self.agent = SimpleQLearningAgent()
+    """
+    Setup your code. This is called once when loading each agent.
+    Make sure that you prepare everything such that act(...) can be called.
 
-def game_events_occurred(self, old_game_state, self_action, new_game_state, events):
-    if old_game_state is not None:
-        old_state = tuple(game_state_to_features(old_game_state))
-        new_state = tuple(game_state_to_features(new_game_state))
-        reward = reward_from_events(self, events)
-        self.agent.update_q_table(old_state, new_state, self_action, reward)
+    When in training mode, the separate `setup_training` in train.py is called
+    after this method. This separation allows you to share your trained agent
+    with other students, without revealing your training code.
 
-def end_of_round(self, last_game_state, last_action, events):
-    pass
+    In this example, our model is a set of probabilities over actions
+    that are is independent of the game state.
+
+    :param self: This object is passed to all callbacks and you can set arbitrary values.
+    """
+    if self.train or not os.path.isfile("my-saved-model.pt"):
+        self.logger.info("Setting up model from scratch.")
+        weights = np.random.rand(len(ACTIONS))
+        self.model = weights / weights.sum()
+    else:
+        self.logger.info("Loading model from saved state.")
+        with open("my-saved-model.pt", "rb") as file:
+            self.model = pickle.load(file)
+
+
 
 def game_state_to_features(game_state):
-    features = np.zeros((4, 7))  # Initialize a 4x7 grid for features
+    # Initialize a 21x21 grid centered around the agent
+    grid_size = 21
+    features = np.zeros((grid_size, grid_size))
 
     # Extract relevant information from game_state
     field = game_state['field']
@@ -63,32 +109,18 @@ def game_state_to_features(game_state):
     bombs = game_state['bombs']
     coins = game_state['coins']
     explosion_map = game_state['explosion_map']
+    orientation = game_state['self'][2]  # Agent's orientation (0, 1, 2, or 3)
 
-    # Define constants for feature values
-    WALL = -1
-    EXPLOSION = -3
-    FREE = 0
-    CRATE = 1
-    COIN = 2
-    PLAYER = 3
-    BOMB = -10
+    # Calculate the position of the agent in the centered grid
+    agent_x, agent_y = self_position
+    grid_center = grid_size // 2
+    x_offset = grid_center - agent_x
+    y_offset = grid_center - agent_y
 
-    # Define a mapping of event types to feature values
-    event_to_feature = {
-        e.BOMB_EXPLODED: EXPLOSION,
-        e.COIN_COLLECTED: COIN,
-        e.CRATE_DESTROYED: FREE,
-        e.KILLED_OPPONENT: PLAYER,
-        e.KILLED_SELF: PLAYER,
-        e.WAITED: FREE,
-        e.BOMB_DROPPED: BOMB,
-        e.SURVIVED_ROUND: FREE,
-    }
-
-    # Iterate over the 4x7 grid and populate features
-    for x in range(4):
-        for y in range(7):
-            x_pos, y_pos = self_position[0] - (x - 1), self_position[1] - (y - 3)
+    # Populate the centered grid with features based on game state
+    for x in range(grid_size):
+        for y in range(grid_size):
+            x_pos, y_pos = agent_x + x - grid_center, agent_y + y - grid_center
 
             if x_pos < 0 or y_pos < 0 or x_pos >= len(field) or y_pos >= len(field[0]):
                 # Out of bounds, consider it a wall
@@ -118,5 +150,103 @@ def game_state_to_features(game_state):
                 if explosion_map[x_pos][y_pos] > 0:
                     features[x, y] = EXPLOSION
 
-    # Flatten the 4x7 grid into a 28-dimensional feature vector
+    # Flatten the centered grid into a 2D feature vector
     return features.reshape(-1)
+
+def get_directions():
+    # Return possible movement directions (UP, DOWN, LEFT, RIGHT)
+    directions = ["UP", "DOWN", "LEFT", "RIGHT"]
+    return directions
+
+def get_valid_moves(game_state):
+    # Return valid movements based on the game state
+    valid_moves = []
+    directions = get_directions()
+    
+    # Check if the move in the given direction is valid
+    for direction in directions:
+        new_x, new_y = move_in_direction(game_state, direction)
+        if is_valid_position(game_state, new_x, new_y):
+            valid_moves.append(direction)
+            
+    return valid_moves
+
+def move_in_direction(game_state, direction):
+    # Calculate the new position when moving in the given direction
+    x, y = game_state['self'][3]
+    if direction == "UP":
+        x -= 1
+    elif direction == "DOWN":
+        x += 1
+    elif direction == "LEFT":
+        y -= 1
+    elif direction == "RIGHT":
+        y += 1
+    return x, y
+
+def is_valid_position(game_state, x, y):
+    # Check if the given position is valid (not a wall or out of bounds)
+    field = game_state['field']
+    if 0 <= x < len(field) and 0 <= y < len(field[0]) and field[x][y] != -1:
+        return True
+    return False
+
+def find_nearest_coin(game_state):
+    # Find the nearest coin based on the game state
+    coins = game_state['coins']
+    if coins:
+        self_x, self_y = game_state['self'][3]
+        nearest_coin = min(coins, key=lambda c: manhattan_distance((self_x, self_y), c))
+        return nearest_coin
+    return None
+
+def find_hidden_coins(game_state):
+    # Find all hidden coins based on the game state
+    visible_coins = set(game_state['coins'])
+    all_possible_positions = [(x, y) for x in range(21) for y in range(21)]
+    hidden_coins = [pos for pos in all_possible_positions if pos not in visible_coins]
+    return hidden_coins
+
+def hunt_opponents(game_state):
+    # Hunt and blow up opponents based on the game state
+    opponents = [player[3] for player in game_state['others']]
+    bombs = game_state['bombs']
+    self_x, self_y = game_state['self'][3]
+
+    # Determine a safe distance to engage opponents
+    safe_distance = 2  # Adjust as needed
+
+    for opponent in opponents:
+        if manhattan_distance((self_x, self_y), opponent) <= safe_distance:
+            # If opponent is within a safe distance, drop a bomb to engage
+            return "BOMB"
+    
+    # No need to engage opponents, return None
+    return None
+
+def battle_opposing_agents(game_state):
+    # Engage and compete against opposing agents based on the game state
+    # You can use more advanced strategies to compete with opponents
+    # Implement logic to compete with opposing agents
+    # Return an action to compete or None if no action is needed
+    
+    # For example, if there is an opponent within range, drop a bomb to engage
+    opponents = [player[3] for player in game_state['others']]
+    self_x, self_y = game_state['self'][3]
+
+    # Determine a safe distance to engage opponents
+    safe_distance = 2  # Adjust as needed
+
+    for opponent in opponents:
+        if manhattan_distance((self_x, self_y), opponent) <= safe_distance:
+            # If opponent is within a safe distance, drop a bomb to engage
+            return "BOMB"
+    
+    # No need to engage opponents, return None
+    return None
+
+def manhattan_distance(pos1, pos2):
+    # Calculate the Manhattan distance between two positions
+    x1, y1 = pos1
+    x2, y2 = pos2
+    return abs(x1 - x2) + abs(y1 - y2)
