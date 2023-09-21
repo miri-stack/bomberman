@@ -1,6 +1,7 @@
 import numpy as np
 import pickle, os
 import events as e
+import copy, random
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -136,8 +137,9 @@ def act(self, game_state: dict):
     self.logger.debug(f'The orientation should be (1,1) and is {current_orientation}')
 
     random_number = random.uniform(0,1)
-    if random_number > epsilon:
-        action = np.argmax(qtable[state])
+    state = state_to_features(game_state)
+    if random_number > self.epsilon:
+        action = np.argmax(self.qtable[state])
     else:
         # choose random action
         self.action = np.random.choice(self.actions)
@@ -188,8 +190,8 @@ def state_to_features(game_state: dict) -> np.array:
             view.append(tile_info)
 
         # Check if the tile is within the bounds of the explosion map.
-        if 0 <= x < explosion_map.shape[0] and 0 <= y < explosion_map.shape[1]:
-            countdown = explosion_map[x][y]
+        if 0 <= x < explosions.shape[0] and 0 <= y < explosions.shape[1]:
+            countdown = explosions[x][y]
             normalized_countdown = countdown / 3.0  # Normalize by dividing by the maximum countdown (3)
             countdowns.append(normalized_countdown)
         else:
