@@ -6,9 +6,9 @@ from typing import List
 
 # define parameters
 # alpha, gamma epsilon
-ALPHA = 0.001
+ALPHA = 0.5
 GAMMA = 0.99
-EPSILON = 0.9
+EPSILON = 0.2
 
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 10  # keep only ... last transitions
@@ -42,11 +42,13 @@ def update_qtable (self, old_game_state, self_action, events):
   if tuple(last_transition.state) not in self.qtable:
     self.qtable[tuple(last_transition.state)] = {}
   self.qtable[tuple(last_transition.state)][last_transition.action] = q_value_new
+  """
   if e.KILLED_SELF or e.GOT_KILLED in events:
     reward = get_reward_from_events(self,events)
     if tuple(old_game_state) not in self.qtable:
       self.qtable[tuple(old_game_state)] = {}
     self.qtable[tuple(old_game_state)][self_action] = q_value_next + self.alpha * (reward - q_value_next)
+  """
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -136,14 +138,15 @@ def get_reward_from_events(self, events) -> int:
       e.CRATE_DESTROYED: 100,
       e.COIN_FOUND: 100,
       e.BOMB_DROPPED: 10,
-      e.KILLED_SELF: -200,
-      e.GOT_KILLED: -700,
+      # e.KILLED_SELF: -100,
+      e.GOT_KILLED: -200,
       e.SURVIVED_ROUND: 500
   }
   reward_sum = 0
   for event in events:
-        reward_sum += game_rewards[event]
-        self.statistics_dict[str(event)] += 1 # Update statistics
+        if event in game_rewards:
+          reward_sum += game_rewards[event]
+          self.statistics_dict[str(event)] += 1 # Update statistics
   self.logger.info("Rewards granted for this round")
   self.statistics_dict["reward"] += reward_sum
   # table or something for those
