@@ -25,7 +25,7 @@ def setup_training(self):
   ''' called when loading the agent, after calling setup in callbacks.py.
   Use this to initialize variables you only need for training.
   '''
-  self.statistic_dict = None
+  self.statistics_dict = None
   self.gamma = GAMMA
   self.epsilon = EPSILON
   self.alpha = ALPHA
@@ -33,6 +33,20 @@ def setup_training(self):
   # self.state_dim = hp.INPUT_SHAPE[0]*hp.INPUT_SHAPE[1]
   self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
   # self.qtable = pd.DataFrame(columns=ACTIONS,dtype=np.float64)
+
+def update_qtable (self, old_game_state, self_action, events):
+  last_transition = self.transitions[-1]
+  q_value_old = self.qtable.get(tuple(last_transition.state), {}).get(last_transition.action, 0.0)
+  q_value_next = self.qtable.get(tuple(old_game_state),{}).get(self_action, 0.0)
+  q_value_new = q_value_old + self.alpha * (last_transition.reward + self.gamma * q_value_next - q_value_old)
+  if tuple(last_transition.state) not in self.qtable:
+    self.qtable[tuple(last_transition.state)] = {}
+  self.qtable[tuple(last_transition.state)][last_transition.action] = q_value_new
+  if e.KILLED_SELF or e.GOT_KILLED in events:
+    reward = get_reward_from_events(self,events)
+    if tuple(old_game_state) not in self.qtable:
+      self.qtable[tuple(old_game_state)] = {}
+    self.qtable[tuple(old_game_state)][self_action] = q_value_next + self.alpha * (reward - q_value_next)
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -56,7 +70,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
   # Setup statistics dictionary if necessary
   if old_game_state['step'] == 1: # Initialise new dict
-      self.statistic_dict = defaultdict(int) # defaultdict with 0 as default value
+      self.statistics_dict = defaultdict(int) # defaultdict with 0 as default value
       self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE) # Reset transitions
 
 
@@ -74,26 +88,36 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
   new_state = state_to_features(new_game_state_adjusted)
 
   reward = get_reward_from_events(self, events)
-  self.transitions.append(Transition(old_game_state, self_action, new_game_state, reward))
+  self.transitions.append(Transition(old_state, self_action, new_state, reward))
+  update_qtable(self, old_state,self_action, events)
 
+  """"
   last_transition = self.transitions[-1]
-
-
   q_value_old = self.qtable.get(tuple(last_transition.state), {}).get(last_transition.action, 0.0)
   q_value_next = self.qtable.get(tuple(old_game_state),{}).get(self_action, 0.0)
   q_value_new = q_value_old + self.alpha * (last_transition.reward + self.gamma * (q_value_next - q_value_old))
   if tuple(last_transition.state) not in self.qtable:
     self.qtable[tuple(last_transition.state)] = {}
   self.qtable[tuple(last_transition.state)][last_transition.action] = q_value_new
+  """
 
 
 
 def end_of_round(self, last_game_state, last_action, events):
   '''is very similar to the previous, but only called once per agent after the last step of a round '''
-  # Store the model in every 10th episode
-  if last_game_state['round'] % 10 == 0:
-      with open("save_files/table_" + str(last_game_state['round']) + ".pt","wb") as file:
-            pickle.dump(self.qtable, file)
+  if e.SURVIVED_ROUND in events:
+        self.logger.info("Round survived!")
+  self.statistics_dict['score'] = last_game_state['self'][1]
+  # Get old_game_state
+  old_game_state_adjusted = rotate_map(last_game_state, self.orientation)
+  old_state = state_to_features(old_game_state_adjusted)
+  # Store the model in every 100th episode
+  update_qtable(self, old_state, last_action, events)
+  if last_game_state['round'] % 100 == 0:
+    with open("save_files/table_" + str(last_game_state['round']) + ".pt","wb") as file:
+      pickle.dump(self.qtable, file)
+    with open("save_files/statistics_" + str(last_game_state['round']) + ".pt", "wb") as stat_file:
+      pickle.dump(self.statistics_dict, stat_file)
 
 
 
@@ -112,13 +136,16 @@ def get_reward_from_events(self, events) -> int:
       e.CRATE_DESTROYED: 100,
       e.COIN_FOUND: 100,
       e.BOMB_DROPPED: 10,
-      e.KILLED_SELF: -500,
+      e.KILLED_SELF: -200,
       e.GOT_KILLED: -700,
+      e.SURVIVED_ROUND: 500
   }
   reward_sum = 0
   for event in events:
         reward_sum += game_rewards[event]
+        self.statistics_dict[str(event)] += 1 # Update statistics
   self.logger.info("Rewards granted for this round")
+  self.statistics_dict["reward"] += reward_sum
   # table or something for those
   return reward_sum
 
