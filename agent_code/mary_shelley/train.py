@@ -26,8 +26,9 @@ def setup_training(self):
   Use this to initialize variables you only need for training.
   '''
   self.statistic_dict = None
-  self.gamma = self.GAMMA
-  self.epsilon = self.EPSILON
+  self.gamma = GAMMA
+  self.epsilon = EPSILON
+  self.alpha = ALPHA
 
   # self.state_dim = hp.INPUT_SHAPE[0]*hp.INPUT_SHAPE[1]
   self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
@@ -72,16 +73,18 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
   new_game_state_adjusted = rotate_map(new_game_state, self.orientation)
   new_state = state_to_features(new_game_state_adjusted)
 
-  reward = get_reward_from_events(events)
+  reward = get_reward_from_events(self, events)
   self.transitions.append(Transition(old_game_state, self_action, new_game_state, reward))
 
   last_transition = self.transitions[-1]
 
-  if last_transition.state not in self.qtable:
-    self.qtable[last_transition.state] = {}
-  if not self.qtable[old_game_state][self_action]:
-      self.qtable[old_game_state]
-  self.qtable[last_transition.state][last_transition.action] = self.qtable[last_transition.state, last_transition.action] + self.alpha * (last_transition.reward + self.gamma * (self.qtable[old_game_state,self_action] - self.qtable)[last_transition.state,last_transition.action])
+
+  q_value_old = self.qtable.get(tuple(last_transition.state), {}).get(last_transition.action, 0.0)
+  q_value_next = self.qtable.get(tuple(old_game_state),{}).get(self_action, 0.0)
+  q_value_new = q_value_old + self.alpha * (last_transition.reward + self.gamma * (q_value_next - q_value_old))
+  if tuple(last_transition.state) not in self.qtable:
+    self.qtable[tuple(last_transition.state)] = {}
+  self.qtable[tuple(last_transition.state)][last_transition.action] = q_value_new
 
 
 
@@ -89,8 +92,8 @@ def end_of_round(self, last_game_state, last_action, events):
   '''is very similar to the previous, but only called once per agent after the last step of a round '''
   # Store the model in every 10th episode
   if last_game_state['round'] % 10 == 0:
-      with open("save_files/table_" + str(last_game_state['round']) + ".pt","w") as file:
-            pickle.dump(self.Q, file)
+      with open("save_files/table_" + str(last_game_state['round']) + ".pt","wb") as file:
+            pickle.dump(self.qtable, file)
 
 
 
@@ -115,7 +118,7 @@ def get_reward_from_events(self, events) -> int:
   reward_sum = 0
   for event in events:
         reward_sum += game_rewards[event]
-  self.logger("Rewards granted for this round")
+  self.logger.info("Rewards granted for this round")
   # table or something for those
   return reward_sum
 

@@ -107,6 +107,7 @@ def setup(self):
     self.logger.info('Mary Shelly is getting ready.')
     self.current_round = 0
     self.orientation = 0
+    self.actions = ACTIONS
 
     if self.train and not os.path.isfile('my-saved-model.pt'):
         self.logger.info('Setting up model from scratch.')
@@ -122,7 +123,7 @@ def setup(self):
 
 
 def act(self, game_state: dict):
-    self.logger.info('Pick action according to pressed key')
+    self.logger.info('Pick action')
     # observe environment
 
     if game_state['step'] == 1: # First round, setup orientation
@@ -131,21 +132,28 @@ def act(self, game_state: dict):
 
     # Rotate Map
     game_state = rotate_map(game_state, self.orientation)
+    
 
     current_orientation = game_state['self'][3]
     # Check if orientation correct
     self.logger.debug(f'The orientation should be (1,1) and is {current_orientation}')
-
-    random_number = random.uniform(0,1)
     state = state_to_features(game_state)
-    if random_number > self.epsilon:
-        action = np.argmax(self.qtable[state])
-    else:
+
+    if self.train:
+
+        random_number = random.uniform(0,1)
         # choose random action
-        self.action = np.random.choice(self.actions)
+        if random_number < self.epsilon:
+            action = np.random.choice(self.actions)
+            return action
+    if tuple(state) not in self.qtable:
+        action=  np.random.choice(ACTIONS,p=[.2, .2, .2, .2, .1, .1])
+    else:
+        action = np.argmax(self.qtable[tuple(state)])
+    return action
 
 
-def state_to_features(game_state: dict) -> np.array:
+def state_to_features(game_state: dict):
     """
     *This is not a required function, but an idea to structure your code.*
 
@@ -170,55 +178,60 @@ def state_to_features(game_state: dict) -> np.array:
     field = game_state['field']
     others = game_state['others']
 
-    view = []
-    countdowns = []
+    view = np.zeros((9))
+    countdowns = np.zeros((9))
     directions = [(-1,-1),(0,-1),(1,-1),(-1,0),(0,0),(1,0),(-1,1),(0,1),(1,1)]
-    for direct in directions:
+    for k, direct in enumerate(directions):
         x_dir, y_dir = direct
         x, y = x_self + x_dir, y_self + y_dir
-        tile_info = field[x,y]
+        tile_info = field[x][y]
         if x_dir < 0 or y_dir < 0 or x_dir >= len(field) or y_dir >= len(field[0]):
                 # Out of bounds, consider it a wall
-                view.append(-2)
+                view[k] = -2
         elif tile_info == 0:
             for bomb in bombs:
-                if bomb[0][0] == x and bomb[0][1] == y: view.append(-2)
+                if bomb[0][0] == x and bomb[0][1] == y: view[k] = -2
                 # explosion
             for coin in coins:
-                if coin[0] == x and coin[1] == y: view.append(2)
+                if coin[0] == x and coin[1] == y: view[k] = 2
         else:
-            view.append(tile_info)
-
+            view[k] = tile_info
+       
         # Check if the tile is within the bounds of the explosion map.
-        if 0 <= x < explosions.shape[0] and 0 <= y < explosions.shape[1]:
+        if 0 <= x < len(explosions) and 0 <= y < len(explosions[0]):
             countdown = explosions[x][y]
             normalized_countdown = countdown / 3.0  # Normalize by dividing by the maximum countdown (3)
-            countdowns.append(normalized_countdown)
+            countdowns[k] = normalized_countdown
         else:
-            countdowns.append(0)  # If out of bounds, countdown is 0.
+            countdowns[k] = 0  # If out of bounds, countdown is 0.
 
     # Manhatten Distance to nearest coin
-    nearest_coin = float('inf')
+    nearest_coin = 100
     for coin_pos in coins:
         distance = abs(x_self - coin_pos[0]) + abs(y_self - coin_pos[1])
         if distance < nearest_coin:
             nearest_coin = distance
 
     # Manhatten Distance to nearest bomb
-    nearest_bomb = float('inf')
-    for bomb_pos in bombs:
+    # take bomb position
+
+    nearest_bomb = 100
+    for bomb in bombs:
+        bomb_pos = bomb[0]    
         distance = abs(x_self - bomb_pos[0]) + abs(y_self - bomb_pos[1])
         if distance < nearest_bomb:
             nearest_bomb = distance
 
     # Manhatten Distance to nearest opponent
-    nearest_opponent = float('inf')
+    nearest_opponent = 100
     for other in others:
         distance = abs(x_self - other[3][0]) + abs(y_self - other[3][1])
         if distance < nearest_opponent:
             nearest_opponent = distance
 
-    return view + countdowns + nearest_coin + nearest_bomb + nearest_opponent
+    features = np.concatenate([np.atleast_1d(a) for a in [view, countdowns, nearest_coin, nearest_bomb, nearest_opponent]])
+
+    return features
         
 
     
