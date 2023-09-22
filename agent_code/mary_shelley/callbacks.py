@@ -136,7 +136,8 @@ def act(self, game_state: dict):
 
     current_orientation = game_state['self'][3]
     # Check if orientation correct
-    self.logger.debug(f'The orientation should be (1,1) and is {current_orientation}')
+    if game_state['step'] == 1:
+        self.logger.debug(f'The orientation should be (1,1) and is {current_orientation}')
     state = state_to_features(game_state)
 
     if self.train:
