@@ -7,6 +7,12 @@ import random
 import events as e
 from .callbacks import game_state_to_features  # Add your implementation of rotate_map if needed
 
+# TODO: input should be the same but change rewards
+# training phases: step by step rewards anpassen, sodass spezifische sachen trainiert werden (wie coins sammeln, bombs vermeiden)
+# retrain with new rewards and previous knowledge
+# --agent you have to specify all agents that are to be used
+# different scenarios in settings.py 
+
 # Define Hyperparameters and Constants
 WALL = -1
 EXPLOSION = -3

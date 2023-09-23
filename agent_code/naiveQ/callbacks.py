@@ -1,4 +1,5 @@
 from collections import deque, defaultdict
+import copy
 import os
 import numpy as np
 import random
@@ -56,6 +57,41 @@ class SimpleQLearningAgent:
                 else:
                     self.action = np.random.choice(self.actions)  # If no Q-values are available, explore
 
+            # Additional logic for improved decision-making
+            nearest_coin = find_nearest_coin(game_state)
+            hidden_coins = find_hidden_coins(game_state)
+            opponent_action = hunt_opponents(game_state)
+            battle_action = battle_opposing_agents(game_state)
+
+            if nearest_coin:
+                # If there's a nearest coin, prioritize collecting it
+                coin_x, coin_y = nearest_coin
+
+                # Get the agent's orientation (dx, dy) from game_state
+                orientation = game_state['self'][3]
+
+                # Calculate the agent's current position
+                self_x, self_y = game_state['self'][3]
+
+                # Use the orientation to determine the action lookup
+                action_lookup = get_movement_lookup(orientation)
+
+                if (coin_x, coin_y) in hidden_coins:
+                    # If the nearest coin is hidden, consider dropping a bomb
+                    if action_lookup[self.action] != "BOMB" and action_lookup[self.action] != "WAIT":
+                        self.action = "BOMB"
+                else:
+                    # Move towards the nearest visible coin
+                    self.action = action_lookup[get_direction_towards(self_x, self_y, coin_x, coin_y)]
+
+            if opponent_action:
+                # If there's an opponent nearby, consider the opponent's suggested action
+                self.action = opponent_action
+
+            if battle_action:
+                # If in a battle situation, follow the battle action
+                self.action = battle_action
+
         return self.action
 
     def update_q_table(self, old_state, new_state, action, reward):
@@ -100,16 +136,16 @@ def setup(self):
 
 def game_state_to_features(game_state):
     # Initialize a 21x21 grid centered around the agent
-    grid_size = 21
+    grid_size = 5
     features = np.zeros((grid_size, grid_size))
 
     # Extract relevant information from game_state
     field = game_state['field']
     self_position = game_state['self'][3]
-    bombs = game_state['bombs']
+    bombs = game_state['bombs'] # TODO: run away from the first detonation 
     coins = game_state['coins']
     explosion_map = game_state['explosion_map']
-    orientation = game_state['self'][2]  # Agent's orientation (0, 1, 2, or 3)
+    orientation = game_state['self'][3]  # Agent's orientation (0, 1, 2, or 3) TODO: use johannas orientation
 
     # Calculate the position of the agent in the centered grid
     agent_x, agent_y = self_position
@@ -153,6 +189,101 @@ def game_state_to_features(game_state):
     # Flatten the centered grid into a 2D feature vector
     return features.reshape(-1)
 
+def get_movement_lookup(position):
+    if position[0] != 1 and position[1] == 1:
+        dir_lookup_RO = {
+            'UP': 'RIGHT',
+            'RIGHT': 'DOWN',
+            'DOWN': 'LEFT',
+            'LEFT': 'UP',
+            'BOMB': 'BOMB',
+            'WAIT': 'WAIT'
+        }
+        return dir_lookup_RO
+    elif position[0] == 1 and position[1] != 1:
+        dir_lookup_LU = {
+            'UP': 'LEFT',
+            'RIGHT': 'UP',
+            'DOWN': 'RIGHT',
+            'LEFT': 'DOWN',
+            'BOMB': 'BOMB',
+            'WAIT': 'WAIT'
+        }
+        return dir_lookup_LU
+    elif position[0] != 1 and position[1] != 1:
+        dir_lookup_RU = {
+            'UP': 'DOWN',
+            'RIGHT': 'LEFT',
+            'DOWN': 'UP',
+            'LEFT': 'RIGHT',
+            'BOMB': 'BOMB',
+            'WAIT': 'WAIT'
+        }
+        return dir_lookup_RU
+    elif position[0] == 1 and position[1] == 1:
+        dir_lookup_LO = {
+            'UP': 'UP',
+            'RIGHT': 'RIGHT',
+            'DOWN': 'DOWN',
+            'LEFT': 'UP',
+            'BOMB': 'BOMB',
+            'WAIT': 'WAIT'
+        }
+        return dir_lookup_LO
+
+def rotate_map(game_state_val, position):
+    game_state = copy.deepcopy(game_state_val)
+    field_size = len(game_state['field']) - 1  # Assume the map is quadratic
+
+    if position == (1, 1):  # No rotation needed for (1, 1) orientation
+        return game_state
+
+    elif position[0] != 1 and position[1] != 1:
+        # Rotate map-based values
+        game_state['field'] = [list(reversed(row)) for row in reversed(game_state['field'])]
+        game_state['explosion_map'] = [list(reversed(row)) for row in reversed(game_state['explosion_map'])]
+
+        # Rotate coordinate-based values
+        game_state['bombs'] = [((field_size - o[0][0], field_size - o[0][1]), o[1]) for o in game_state['bombs']]
+        game_state['coins'] = [(field_size - coord[0], field_size - coord[1]) for coord in game_state['coins']]
+        game_state['self'] = (
+            game_state['self'][0], game_state['self'][1], game_state['self'][2],
+            (field_size - game_state['self'][3][0], field_size - game_state['self'][3][1]))
+        game_state['others'] = [(o[0], o[1], o[2], (field_size - o[3][0], field_size - o[3][1])) for o in
+                                game_state['others']]
+
+        return game_state
+
+    elif position[0] == 1 and position[1] != 1:
+        # Rotate map-based values
+        game_state['field'] = list(reversed(list(map(list, zip(*game_state['field'])))))
+        game_state['explosion_map'] = list(reversed(list(map(list, zip(*game_state['explosion_map'])))))
+
+        # Rotate coordinate-based values
+        game_state['bombs'] = [((field_size - o[0][1], o[0][0]), o[1]) for o in game_state['bombs']]
+        game_state['coins'] = [(field_size - coord[1], coord[0]) for coord in game_state['coins']]
+        game_state['self'] = (
+            game_state['self'][0], game_state['self'][1], game_state['self'][2],
+            (field_size - game_state['self'][3][1], game_state['self'][3][0]))
+        game_state['others'] = [(o[0], o[1], o[2], (field_size - o[3][1], o[3][0])) for o in game_state['others']]
+
+        return game_state
+
+    elif position[0] != 1 and position[1] == 1:
+        # Rotate map-based values
+        game_state['field'] = [list(reversed(row)) for row in zip(*game_state['field'])]
+        game_state['explosion_map'] = [list(reversed(row)) for row in zip(*game_state['explosion_map'])]
+
+        # Rotate coordinate-based values
+        game_state['bombs'] = [((o[0][1], field_size - o[0][0]), o[1]) for o in game_state['bombs']]
+        game_state['coins'] = [(coord[1], field_size - coord[0]) for coord in game_state['coins']]
+        game_state['self'] = (
+            game_state['self'][0], game_state['self'][1], game_state['self'][2],
+            (game_state['self'][3][1], field_size - game_state['self'][3][0]))
+        game_state['others'] = [(o[0], o[1], o[2], (o[3][1], field_size - o[3][0])) for o in game_state['others']]
+
+        return game_state
+
 def get_directions():
     # Return possible movement directions (UP, DOWN, LEFT, RIGHT)
     directions = ["UP", "DOWN", "LEFT", "RIGHT"]
@@ -170,6 +301,28 @@ def get_valid_moves(game_state):
             valid_moves.append(direction)
             
     return valid_moves
+
+def get_direction_towards(start_x, start_y, target_x, target_y):
+    """
+    Calculate the direction from start position to target position.
+
+    :param start_x: X-coordinate of the starting position.
+    :param start_y: Y-coordinate of the starting position.
+    :param target_x: X-coordinate of the target position.
+    :param target_y: Y-coordinate of the target position.
+    :return: A string representing the direction ('UP', 'DOWN', 'LEFT', 'RIGHT') to move from start to target.
+    """
+    if start_x < target_x:
+        return 'RIGHT'
+    elif start_x > target_x:
+        return 'LEFT'
+    elif start_y < target_y:
+        return 'DOWN'
+    elif start_y > target_y:
+        return 'UP'
+    else:
+        return 'WAIT'
+
 
 def move_in_direction(game_state, direction):
     # Calculate the new position when moving in the given direction
@@ -218,19 +371,16 @@ def hunt_opponents(game_state):
 
     for opponent in opponents:
         if manhattan_distance((self_x, self_y), opponent) <= safe_distance:
-            # If opponent is within a safe distance, drop a bomb to engage
-            return "BOMB"
+            # If opponent is within a safe distance, prioritize attacking them with bombs
+            # Calculate the direction to the opponent
+            direction = get_direction_towards(self_x, self_y, opponent[0], opponent[1])
+            return direction  # Return the direction to attack the opponent
     
-    # No need to engage opponents, return None
+    # No nearby opponents, return None
     return None
 
 def battle_opposing_agents(game_state):
     # Engage and compete against opposing agents based on the game state
-    # You can use more advanced strategies to compete with opponents
-    # Implement logic to compete with opposing agents
-    # Return an action to compete or None if no action is needed
-    
-    # For example, if there is an opponent within range, drop a bomb to engage
     opponents = [player[3] for player in game_state['others']]
     self_x, self_y = game_state['self'][3]
 
@@ -239,10 +389,12 @@ def battle_opposing_agents(game_state):
 
     for opponent in opponents:
         if manhattan_distance((self_x, self_y), opponent) <= safe_distance:
-            # If opponent is within a safe distance, drop a bomb to engage
-            return "BOMB"
+            # If opponent is within a safe distance, prioritize attacking them with bombs
+            # Calculate the direction to the opponent
+            direction = get_direction_towards(self_x, self_y, opponent[0], opponent[1])
+            return direction  # Return the direction to attack the opponent
     
-    # No need to engage opponents, return None
+    # No nearby opponents, return None
     return None
 
 def manhattan_distance(pos1, pos2):
