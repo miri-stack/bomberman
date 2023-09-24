@@ -6,9 +6,9 @@ from typing import List
 
 # define parameters
 # alpha, gamma epsilon
-ALPHA = 0.7
-GAMMA = 0.8
-EPSILON = 0.4
+ALPHA = 0.001
+GAMMA = 0.99
+EPSILON = 0.1
 
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 10  # keep only ... last transitions
