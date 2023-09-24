@@ -2,9 +2,20 @@ import numpy as np
 import pickle, os
 import events as e
 import copy, random
+import settings as s
 
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
+WALL = 0
+FREE = 1
+CRATE = 2
+COIN = 5
+PLAYER = 0
+BOMB = -5
+OTHER = 0
+
+WINDOW_LENGTH = 11
+INPUT_SHAPE = (WINDOW_LENGTH, WINDOW_LENGTH)
 
 # Define rotation of movements based on agent position in the beginning
 def get_movement_lookup(position):
@@ -171,70 +182,69 @@ def state_to_features(game_state: dict):
     # This is the dict before the game begins and after it ends
     if game_state is None:
         return None
-
     x_self, y_self = game_state['self'][3]
     bombs = game_state['bombs']
     coins = game_state['coins']
-    explosions = game_state['explosion_map']
-    field = game_state['field']
+    explosions = np.array(game_state['explosion_map'])
+    field = np.array(game_state['field'])
     others = game_state['others']
+    rows, cols = field.shape[0], field.shape[1]
+    observation = np.zeros([rows, cols], dtype=np.float32)
 
-    view = np.zeros((9))
-    countdowns = np.zeros((9))
-    directions = [(-1,-1),(0,-1),(1,-1),(-1,0),(0,0),(1,0),(-1,1),(0,1),(1,1)]
-    for k, direct in enumerate(directions):
-        x_dir, y_dir = direct
-        x, y = x_self + x_dir, y_self + y_dir
-        tile_info = field[x][y]
-        if x_dir < 0 or y_dir < 0 or x_dir >= len(field) or y_dir >= len(field[0]):
-                # Out of bounds, consider it a wall
-                view[k] = -2
-        elif tile_info == 0:
-            for bomb in bombs:
-                if bomb[0][0] == x and bomb[0][1] == y: view[k] = -2
-                # explosion
-            for coin in coins:
-                if coin[0] == x and coin[1] == y: view[k] = 2
-        else:
-            view[k] = tile_info
-       
-        # Check if the tile is within the bounds of the explosion map.
-        if 0 <= x < len(explosions) and 0 <= y < len(explosions[0]):
-            countdown = explosions[x][y]
-            normalized_countdown = countdown / 3.0  # Normalize by dividing by the maximum countdown (3)
-            countdowns[k] = normalized_countdown
-        else:
-            countdowns[k] = 0  # If out of bounds, countdown is 0.
+    # Taken from Bomb Class in items.py
+    def get_blast_coords(x, y, arena):
+        blast_coords = [(x, y)]
 
-    # Manhatten Distance to nearest coin
-    nearest_coin = 100
-    for coin_pos in coins:
-        distance = abs(x_self - coin_pos[0]) + abs(y_self - coin_pos[1])
-        if distance < nearest_coin:
-            nearest_coin = distance
+        for i in range(1, s.BOMB_POWER + 1):
+            if arena[x + i, y] == -1:
+                break
+            blast_coords.append((x + i, y))
+        for i in range(1, s.BOMB_POWER + 1):
+            if arena[x - i, y] == -1:
+                break
+            blast_coords.append((x - i, y))
+        for i in range(1, s.BOMB_POWER + 1):
+            if arena[x, y + i] == -1:
+                break
+            blast_coords.append((x, y + i))
+        for i in range(1, s.BOMB_POWER + 1):
+            if arena[x, y - i] == -1:
+                break
+            blast_coords.append((x, y - i))
 
-    # Manhatten Distance to nearest bomb
-    # take bomb position
-
-    nearest_bomb = 100
-    for bomb in bombs:
-        bomb_pos = bomb[0]    
-        distance = abs(x_self - bomb_pos[0]) + abs(y_self - bomb_pos[1])
-        if distance < nearest_bomb:
-            nearest_bomb = distance
-
-    # Manhatten Distance to nearest opponent
-    nearest_opponent = 100
-    for other in others:
-        distance = abs(x_self - other[3][0]) + abs(y_self - other[3][1])
-        if distance < nearest_opponent:
-            nearest_opponent = distance
-
-    features = np.concatenate([np.atleast_1d(a) for a in [view, countdowns, nearest_coin, nearest_bomb, nearest_opponent]])
-
-    return features
+        return blast_coords
+    
+    if bombs:
+        for bomb in bombs:
+            (x,y), timer = bomb
+            blast_coord = get_blast_coords(x,y,field)
+            for coord in blast_coord:
+                observation[coord] = timer + BOMB
+                if coord == (x_self,y_self):
+                    observation[coord] = BOMB*10
+    observation[np.where(explosions != 0)[0],np.where(explosions != 0)[1]] = BOMB
+    
         
+    if coins:
+        for co in coins:
+            observation[co[0], co[1]] = COIN
+    
+    if others:
+        for ot in others:
+            observation[ot[3][0],ot[3][1]] = OTHER
 
+
+    halfdistance = int(np.floor(WINDOW_LENGTH/2))
+    padded_observation = np.pad(observation, halfdistance, constant_values=WALL)
+
+    # Calculate the slice for the view within the padded observation matrix
+    x_slice = slice(int(x_self), int(x_self) + 2 * halfdistance + 1)
+    y_slice = slice(y_self, y_self + 2 * halfdistance + 1)
+    # Create the view by extracting the subarray from the padded observation matrix
+    view = padded_observation[x_slice, y_slice]
+
+    return view.reshape(-1)
+        
     
 
 

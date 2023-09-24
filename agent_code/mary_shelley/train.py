@@ -8,7 +8,7 @@ from typing import List
 # alpha, gamma epsilon
 ALPHA = 0.001
 GAMMA = 0.99
-EPSILON = 0.1
+EPSILON = 0.7
 
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 10  # keep only ... last transitions
@@ -135,7 +135,7 @@ def get_reward_from_events(self, events) -> int:
       e.BOMB_EXPLODED: 0,
       e.CRATE_DESTROYED: 100,
       e.COIN_FOUND: 100,
-      e.BOMB_DROPPED: -10,
+      e.BOMB_DROPPED: -100,
       e.KILLED_SELF: -100,
       e.GOT_KILLED: -200,
       e.SURVIVED_ROUND: 100
