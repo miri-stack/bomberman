@@ -122,8 +122,6 @@ def end_of_round(self, last_game_state, last_action, events):
       pickle.dump(self.statistics_dict, stat_file)
 
 
-
-
 def get_reward_from_events(self, events) -> int:
   game_rewards = {
       e.COIN_COLLECTED: 100,
@@ -132,15 +130,15 @@ def get_reward_from_events(self, events) -> int:
       e.MOVED_LEFT: 10,
       e.MOVED_UP: 10,
       e.MOVED_DOWN: 10,
-      e.WAITED: -1,
+      e.WAITED: -10,
       e.INVALID_ACTION: -200,
       e.BOMB_EXPLODED: 0,
       e.CRATE_DESTROYED: 100,
       e.COIN_FOUND: 100,
-      e.BOMB_DROPPED: 0,
+      e.BOMB_DROPPED: -10,
       e.KILLED_SELF: -100,
       e.GOT_KILLED: -200,
-      e.SURVIVED_ROUND: 500
+      e.SURVIVED_ROUND: 100
   }
   reward_sum = 0
   for event in events:
