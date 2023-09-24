@@ -6,9 +6,9 @@ from typing import List
 
 # define parameters
 # alpha, gamma epsilon
-ALPHA = 0.5
-GAMMA = 0.99
-EPSILON = 0.2
+ALPHA = 0.7
+GAMMA = 0.8
+EPSILON = 0.4
 
 # Hyper parameters -- DO modify
 TRANSITION_HISTORY_SIZE = 10  # keep only ... last transitions
@@ -128,17 +128,17 @@ def get_reward_from_events(self, events) -> int:
   game_rewards = {
       e.COIN_COLLECTED: 100,
       e.KILLED_OPPONENT: 500,
-      e.MOVED_RIGHT: 1,
-      e.MOVED_LEFT: 1,
-      e.MOVED_UP: 1,
-      e.MOVED_DOWN: 1,
+      e.MOVED_RIGHT: 10,
+      e.MOVED_LEFT: 10,
+      e.MOVED_UP: 10,
+      e.MOVED_DOWN: 10,
       e.WAITED: -1,
       e.INVALID_ACTION: -200,
-      e.BOMB_EXPLODED: 50,
+      e.BOMB_EXPLODED: 0,
       e.CRATE_DESTROYED: 100,
       e.COIN_FOUND: 100,
-      e.BOMB_DROPPED: 10,
-      # e.KILLED_SELF: -100,
+      e.BOMB_DROPPED: 0,
+      e.KILLED_SELF: -100,
       e.GOT_KILLED: -200,
       e.SURVIVED_ROUND: 500
   }
