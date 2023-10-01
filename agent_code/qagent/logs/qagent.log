@@ -1,0 +1,11 @@
+2023-09-25 02:17:51,823 [qagent_code] INFO: QAgent is getting ready.
+2023-09-25 02:17:51,824 [qagent_code] INFO: Setting up model and Q-table from scratch.
+2023-09-25 02:17:51,830 [qagent_wrapper] ERROR: Ran out of input
+Traceback (most recent call last):
+  File "/mnt/c/Users/raees/Documents/msdacs/ss23/mle/final-project/bomberman_rl/agents.py", line 248, in process_event
+    event_result = getattr(module, event_name)(self.fake_self, *event_args)
+  File "/mnt/c/Users/raees/Documents/msdacs/ss23/mle/final-project/bomberman_rl/agent_code/qagent/train.py", line 62, in setup_training
+    self.q_table.load_q_table("q_table.pickle")
+  File "/mnt/c/Users/raees/Documents/msdacs/ss23/mle/final-project/bomberman_rl/agent_code/qagent/qmodel.py", line 41, in load_q_table
+    self.q_table = defaultdict(lambda: defaultdict(float), pickle.load(file))
+EOFError: Ran out of input
