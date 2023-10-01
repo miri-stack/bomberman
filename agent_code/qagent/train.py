@@ -27,7 +27,7 @@ INPUT_SHAPE = (7, 7)
 
 # Hyperparameters
 GAMMA = 0.95
-EPSILON = 0.9
+EPSILON = 0.3
 ALPHA = 0.3
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
@@ -36,10 +36,10 @@ ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 # Hyperparameters for Q-learning
-LEARNING_RATE = 0.1  # Adjust as needed
+LEARNING_RATE = 0.001  # Adjust as needed
 
 # Experience replay buffer
-TRANSITION_HISTORY_SIZE = 10
+TRANSITION_HISTORY_SIZE = 100
 experience_replay = deque(maxlen=TRANSITION_HISTORY_SIZE)
 
 def setup_training(self):
